@@ -63,3 +63,5 @@ fastlane/test_output
 
 # apple-polish
 prototype/out/
+bazel-*
+.bazelrc.user

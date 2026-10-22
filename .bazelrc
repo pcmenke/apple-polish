@@ -1,0 +1,5 @@
+common --enable_platform_specific_config
+build --macos_minimum_os=14.0
+build --apple_platform_type=macos
+test --test_output=errors
+try-import %workspace%/.bazelrc.user
