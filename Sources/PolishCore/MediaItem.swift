@@ -27,18 +27,22 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     public let date: Date?
     public let conversation: String?
     public let sender: String?
+    /// False for a video whose first bytes are not a QuickTime/MP4 container (random or
+    /// encrypted data). Such files can never be thumbnailed or played.
+    public let isReadable: Bool
 
     public var isLinked: Bool { conversation != nil }
     public var name: String { url.lastPathComponent }
 
     public init(url: URL, kind: MediaKind, size: Int64, date: Date?,
-                conversation: String?, sender: String?) {
+                conversation: String?, sender: String?, isReadable: Bool = true) {
         self.url = url
         self.kind = kind
         self.size = size
         self.date = date
         self.conversation = conversation
         self.sender = sender
+        self.isReadable = isReadable
     }
 }
 
@@ -63,5 +67,24 @@ public enum Formatting {
         }
         if let identifier, !identifier.isEmpty { return identifier }
         return "Unknown conversation"
+    }
+}
+
+public enum FileSignature {
+    private static let containerAtoms: Set<String> = [
+        "ftyp", "moov", "mdat", "wide", "free", "skip", "pnot", "junk",
+    ]
+
+    /// True if bytes 4..<8 name a known QuickTime/MP4 top-level atom.
+    public static func looksLikeQuickTime(header: Data) -> Bool {
+        guard header.count >= 8 else { return false }
+        let tag = String(decoding: header[header.startIndex + 4 ..< header.startIndex + 8], as: UTF8.self)
+        return containerAtoms.contains(tag)
+    }
+
+    public static func looksLikeQuickTime(url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        return looksLikeQuickTime(header: (try? handle.read(upToCount: 12)) ?? Data())
     }
 }

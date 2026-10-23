@@ -30,12 +30,14 @@ final class PolishCoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: att, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        func write(_ name: String, megabytes: Int) throws -> String {
+        func write(_ name: String, megabytes: Int, container: Bool = false) throws -> String {
             let url = att.appendingPathComponent(name)
-            try Data(count: megabytes * 1_000_000).write(to: url)
+            var data = Data(count: megabytes * 1_000_000)
+            if container { data.replaceSubrange(0 ..< 12, with: Data([0, 0, 0, 0x20] + Array("ftypqt  ".utf8))) }
+            try data.write(to: url)
             return url.path
         }
-        let linkedVideo = try write("clip.mov", megabytes: 2)
+        let linkedVideo = try write("clip.mov", megabytes: 2, container: true)
         let linkedTiny = try write("tiny.heic", megabytes: 0)
         let orphanVideo = try write("loose.mov", megabytes: 3)
         _ = try write("sticker.pluginpayloadattachment", megabytes: 2)
@@ -67,10 +69,36 @@ final class PolishCoreTests: XCTestCase {
         XCTAssertEqual(items.map(\.name), ["loose.mov", "clip.mov"], "largest first; tiny, missing and non-media files skipped")
         XCTAssertEqual(items[0].url.resolvingSymlinksInPath().path, orphanVideo)
         XCTAssertFalse(items[0].isLinked)
+        XCTAssertFalse(items[0].isReadable, "zero-filled .mov has no container header")
+        XCTAssertTrue(items[1].isReadable)
         XCTAssertTrue(items[1].isLinked)
         XCTAssertEqual(items[1].conversation, "+15551234567")
         XCTAssertEqual(items[1].sender, "+15551234567")
         XCTAssertEqual(items[1].date, Date(timeIntervalSinceReferenceDate: 86_400))
+
+        let named = try MessagesLibrary(root: root, names: NameResolver(entries: [
+            .init(name: "Ada Lovelace", phones: ["(555) 123-4567"], emails: []),
+        ])).load(minBytes: 1_000_000)
+        XCTAssertEqual(named.first { $0.name == "clip.mov" }?.conversation, "Ada Lovelace")
+        XCTAssertEqual(named.first { $0.name == "clip.mov" }?.sender, "Ada Lovelace")
+    }
+
+    func testNameResolverMatchesFormattedNumbersAndEmails() {
+        let names = NameResolver(entries: [
+            .init(name: "Ada Lovelace", phones: ["+1 (555) 123-4567"], emails: ["Ada@Example.com"]),
+        ])
+        XCTAssertEqual(names.display("+15551234567"), "Ada Lovelace")
+        XCTAssertEqual(names.display("5551234567"), "Ada Lovelace")
+        XCTAssertEqual(names.display("ada@example.com"), "Ada Lovelace")
+        XCTAssertEqual(names.display("+15559999999"), "+15559999999", "unknown handles stay as they are")
+        XCTAssertNil(names.name(for: nil))
+    }
+
+    func testQuickTimeSignature() {
+        var good = Data([0, 0, 0, 0x20]); good.append(contentsOf: Array("ftypqt  ".utf8))
+        XCTAssertTrue(FileSignature.looksLikeQuickTime(header: good))
+        XCTAssertFalse(FileSignature.looksLikeQuickTime(header: Data([0x2c, 0xee, 0x96, 0xe4, 0x43, 0xc4, 0x8a, 0x42, 0x99])))
+        XCTAssertFalse(FileSignature.looksLikeQuickTime(header: Data([1, 2, 3])))
     }
 
     func testMissingLibraryReportsAccessDenied() {

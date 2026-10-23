@@ -17,10 +17,13 @@ public enum MessagesLibraryError: Error, LocalizedError, Equatable {
 /// Reads a private copy of `chat.db` and scans `Attachments/`. Never modifies or deletes anything.
 public struct MessagesLibrary: Sendable {
     public let root: URL
+    public let names: NameResolver
 
     public init(root: URL = FileManager.default.homeDirectoryForCurrentUser
-                    .appendingPathComponent("Library/Messages")) {
+                    .appendingPathComponent("Library/Messages"),
+                names: NameResolver = .empty) {
         self.root = root
+        self.names = names
     }
 
     private static let query = """
@@ -101,13 +104,14 @@ public struct MessagesLibrary: Sendable {
                 seen.insert(path)
                 let members = (text(stmt, 8) ?? "").split(separator: ",").map(String.init)
                 let convo = Formatting.conversationName(
-                    displayName: text(stmt, 5), identifier: text(stmt, 6),
-                    members: members, isGroup: sqlite3_column_int(stmt, 7) == 43)
+                    displayName: text(stmt, 5), identifier: text(stmt, 6).map(names.display),
+                    members: members.map(names.display), isGroup: sqlite3_column_int(stmt, 7) == 43)
                 items.append(MediaItem(
                     url: URL(fileURLWithPath: path), kind: kind, size: size,
                     date: Formatting.date(fromMessageNanos: sqlite3_column_int64(stmt, 2)),
                     conversation: convo,
-                    sender: sqlite3_column_int(stmt, 3) != 0 ? "You" : text(stmt, 4)))
+                    sender: sqlite3_column_int(stmt, 3) != 0 ? "You" : text(stmt, 4).map(names.display),
+                    isReadable: kind != .video || FileSignature.looksLikeQuickTime(url: URL(fileURLWithPath: path))))
             }
             return items
         }
@@ -138,7 +142,8 @@ public struct MessagesLibrary: Sendable {
             let kind = MediaKind.classify(path: path, mimeType: nil)
             guard kind != .other, !known.contains(path) else { continue }
             items.append(MediaItem(url: url, kind: kind, size: size, date: v.contentModificationDate,
-                                   conversation: nil, sender: nil))
+                                   conversation: nil, sender: nil,
+                                   isReadable: kind != .video || FileSignature.looksLikeQuickTime(url: url)))
         }
         return items
     }

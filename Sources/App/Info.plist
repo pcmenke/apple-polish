@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MinimumOSVersion)</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Apple Polish looks up contact names so conversations show people instead of phone numbers. Nothing leaves this Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

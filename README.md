@@ -14,7 +14,14 @@ The goal is a native macOS (SwiftUI) app, since the tools need real UI (thumbnai
 - `Sources/PolishCore`: data model and the Messages-library reader (no UI, unit-tested).
 - `Sources/App`: SwiftUI app (sidebar of conversations, thumbnail grid, selection totals).
 - The app reads `~/Library/Messages`, so it needs **Full Disk Access** (System Settings, Privacy & Security).
-  Builds are ad-hoc signed, so macOS may ask for the grant again after a rebuild.
+  Unsigned/ad-hoc builds lose that grant on every rebuild. To keep it, sign with your own Apple Development
+  identity: list it with `security find-identity -v -p codesigning`, then put this in `.bazelrc.user`
+  (gitignored; keep your identity out of the repo):
+
+      build --@rules_apple//apple/build_settings:signing_certificate_name="Apple Development: you@example.com (TEAMID)"
+
+  `./scripts/install-app.sh` builds, installs to `~/Applications/Apple Polish.app` (a fixed path), and launches it.
+  Grant Full Disk Access once to that copy.
 - It only reads: nothing is modified or deleted. Delete from inside Messages.
 - "Not linked to a message" lists attachment files on disk that no `chat.db` row points to
   (~8 GB of `.mov` files on the author's Mac). Their origin is not yet understood; do not treat them as junk.
