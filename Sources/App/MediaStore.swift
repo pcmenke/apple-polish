@@ -82,6 +82,15 @@ final class MediaStore: ObservableObject {
         }
     }
 
+    /// Storage pane of System Settings; Messages > Manage there lists attachments by size and
+    /// deletes them through Messages (so the deletion is the one that syncs to iCloud).
+    func openMessagesStorageSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.settings.Storage") {
+            NSWorkspace.shared.open(url)
+        }
+        statusMessage = "In Storage, find Messages and click Manage (or the ⓘ button) to review attachments by size."
+    }
+
     static func openFullDiskAccessSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
             NSWorkspace.shared.open(url)

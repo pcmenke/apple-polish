@@ -13,6 +13,8 @@ final class ViewerModel: ObservableObject {
 
     let thumbnails = RemoteThumbnails()
     private var key: PairingKey?
+    /// A scanned link whose Mac wasn't reachable yet; connects as soon as Bonjour finds it.
+    private var pendingMacName: String?
     private var client: RemoteClient?
     private let browser = MacBrowser()
     private static let keyAccount = "pairing-key"
@@ -23,7 +25,12 @@ final class ViewerModel: ObservableObject {
             key = saved
             state = .disconnected
         }
-        browser.onChange = { [weak self] macs in Task { @MainActor in self?.macs = macs } }
+        browser.onChange = { [weak self] macs in
+            Task { @MainActor in
+                self?.macs = macs
+                self?.connectPendingMacIfFound()
+            }
+        }
         browser.start()
     }
 
@@ -38,6 +45,35 @@ final class ViewerModel: ObservableObject {
         return true
     }
 
+    /// Pairs from a scanned or tapped `applepolish://pair` link and connects straight away.
+    @discardableResult
+    func handle(link: PairingLink) -> Bool {
+        disconnect()
+        KeychainStore.save(link.key.display, account: Self.keyAccount)
+        key = link.key
+        state = .disconnected
+        message = nil
+        Task {
+            if let host = link.host, let port = link.port, await connectClient(host: host, port: port) { return }
+            if let name = link.name, let mac = macs.first(where: { $0.name == name }) { await connect(to: mac); return }
+            pendingMacName = link.name
+            message = "Paired. Couldn't reach the Mac yet; make sure Share to iPhone is on and you're on the same network."
+        }
+        return true
+    }
+
+    func handle(url: URL) {
+        guard let link = PairingLink(url: url) else { return }
+        handle(link: link)
+    }
+
+    private func connectPendingMacIfFound() {
+        guard let name = pendingMacName, state != .connected, state != .connecting,
+              let mac = macs.first(where: { $0.name == name }) else { return }
+        pendingMacName = nil
+        Task { await connect(to: mac) }
+    }
+
     func forgetPairing() {
         disconnect()
         KeychainStore.delete(account: Self.keyAccount)
@@ -45,16 +81,20 @@ final class ViewerModel: ObservableObject {
         state = .needsKey
     }
 
-    func connect(to mac: DiscoveredMac) async { await connect(RemoteClient(endpoint: mac.endpoint, key: key!)) }
+    func connect(to mac: DiscoveredMac) async { _ = await connect(RemoteClient(endpoint: mac.endpoint, key: key!)) }
 
-    func connect(host: String, port: UInt16) async {
-        guard let key, let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+    func connect(host: String, port: UInt16) async { _ = await connectClient(host: host, port: port) }
+
+    @discardableResult
+    private func connectClient(host: String, port: UInt16) async -> Bool {
+        guard let key, let nwPort = NWEndpoint.Port(rawValue: port) else { return false }
         UserDefaults.standard.set(host, forKey: Self.hostDefault)
-        await connect(RemoteClient(endpoint: .hostPort(host: NWEndpoint.Host(host), port: nwPort), key: key))
+        return await connect(RemoteClient(endpoint: .hostPort(host: NWEndpoint.Host(host), port: nwPort), key: key))
     }
 
-    private func connect(_ client: RemoteClient) async {
-        guard key != nil else { return }
+    @discardableResult
+    private func connect(_ client: RemoteClient) async -> Bool {
+        guard key != nil else { return false }
         state = .connecting
         message = nil
         do {
@@ -63,9 +103,11 @@ final class ViewerModel: ObservableObject {
             await thumbnails.use(client)
             state = .connected
             await reload()
+            return true
         } catch {
             state = .disconnected
             message = "\(error.localizedDescription) Check that sharing is on and the key matches."
+            return false
         }
     }
 

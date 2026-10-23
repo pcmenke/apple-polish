@@ -173,6 +173,10 @@ struct ContentView: View {
                 }
                 .popover(isPresented: $showShare) { ShareToPhoneView(host: host) }
             }
+            ToolbarItem {
+                Button("Messages Storage", systemImage: "externaldrive.badge.minus") { store.openMessagesStorageSettings() }
+                    .help("Open System Settings > General > Storage, where Messages has its own Manage list that deletes attachments properly")
+            }
             ToolbarItem { Button("Reload", systemImage: "arrow.clockwise") { store.reload() } }
         }
     }

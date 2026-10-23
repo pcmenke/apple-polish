@@ -9,6 +9,7 @@ final class RemoteHost: ObservableObject {
     @Published private(set) var isSharing = false
     @Published private(set) var status = "Sharing is off"
     @Published private(set) var key: PairingKey
+    @Published private(set) var port: UInt16?
 
     private static let account = "pairing-key"
     private static let enabledDefault = "shareToiPhone"
@@ -31,16 +32,28 @@ final class RemoteHost: ObservableObject {
 
     var hostAddress: String { ProcessInfo.processInfo.hostName }
 
+    /// What the QR code encodes. Includes the port once the listener is up.
+    var pairingLink: PairingLink {
+        PairingLink(key: key, name: Host.current().localizedName, host: hostAddress, port: port)
+    }
+
     func setSharing(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.enabledDefault)
         server?.stop()
         server = nil
+        port = nil
         guard on else { isSharing = false; status = "Sharing is off"; return }
         let server = RemoteServer { [weak self] request in
             guard let self else { return RemoteResponse(id: request.id, error: "Mac app is closing") }
             return await self.respond(to: request)
         }
-        server.onStateChange = { [weak self] text in Task { @MainActor in self?.status = text } }
+        server.onStateChange = { [weak self] text in
+            Task { @MainActor in
+                guard let self else { return }
+                self.status = text
+                self.port = self.server?.port
+            }
+        }
         do {
             try server.start(key: key, name: Host.current().localizedName ?? "Mac")
             self.server = server

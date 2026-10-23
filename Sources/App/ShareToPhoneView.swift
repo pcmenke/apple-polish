@@ -11,7 +11,17 @@ struct ShareToPhoneView: View {
             Text(host.status).font(.callout).foregroundStyle(.secondary)
             if host.isSharing {
                 Divider()
-                Text("Pairing key").font(.headline)
+                Text("Scan to pair").font(.headline)
+                if host.port != nil, let qr = QRCode.image(for: host.pairingLink.url.absoluteString, side: 220) {
+                    Image(nsImage: qr).interpolation(.none).resizable().scaledToFit().frame(width: 220, height: 220)
+                        .frame(maxWidth: .infinity)
+                    Text("Open Apple Polish on your iPhone and tap Scan QR code, or point the Camera at this.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+                Divider()
+                Text("Or type the key").font(.headline)
                 Text(host.key.display)
                     .font(.system(.body, design: .monospaced)).textSelection(.enabled)
                 HStack {
@@ -27,6 +37,6 @@ struct ShareToPhoneView: View {
                 .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
-        .frame(width: 340)
+        .frame(width: 360)
     }
 }

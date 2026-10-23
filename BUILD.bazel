@@ -1,3 +1,4 @@
+load("@rules_apple//apple:apple.bzl", "local_provisioning_profile")
 load("@rules_apple//apple:ios.bzl", "ios_application")
 load("@rules_apple//apple:macos.bzl", "macos_application", "macos_unit_test")
 load("@rules_swift//swift:swift_library.bzl", "swift_library")
@@ -69,6 +70,26 @@ ios_application(
     families = ["iphone"],
     infoplists = ["Sources/iOS/Info.plist"],
     minimum_os_version = "17.0",
+    deps = [":ViewerSources"],
+)
+
+# Xcode-managed wildcard development profile for the team (covers any bundle id), for real devices.
+local_provisioning_profile(
+    name = "ViewerDeviceProfile",
+    profile_name = "iOS Team Provisioning Profile: *",
+)
+
+# Same app, signed with the provisioning profile so it can be installed on a registered iPhone:
+#   bazelisk build //:ApplePolishViewerDevice --ios_multi_cpus=arm64
+ios_application(
+    name = "ApplePolishViewerDevice",
+    app_icons = glob(["Sources/iOS/Assets.xcassets/AppIcon.appiconset/**"]),
+    bundle_id = "com.pcmenke.applepolish.viewer",
+    bundle_name = "Apple Polish Viewer",
+    families = ["iphone"],
+    infoplists = ["Sources/iOS/Info.plist"],
+    minimum_os_version = "17.0",
+    provisioning_profile = ":ViewerDeviceProfile",
     deps = [":ViewerSources"],
 )
 

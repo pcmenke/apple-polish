@@ -30,6 +30,21 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Apple Polish connects to your own Mac on this network to show its media list and thumbnails.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Apple Polish lists the photos and videos on this iPhone by size so you can choose which ones to delete. Nothing leaves your device.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Apple Polish scans the pairing QR code shown on your Mac. Nothing is recorded.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.pcmenke.applepolish.pairing</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>applepolish</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_applepolish._tcp</string>

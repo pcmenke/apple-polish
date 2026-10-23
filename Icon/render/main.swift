@@ -5,16 +5,32 @@ let args = CommandLine.arguments
 guard args.count >= 3, let svg = NSImage(contentsOf: URL(fileURLWithPath: args[1])) else {
     fatalError("usage: render <icon.svg> <output dir>; the SVG must load")
 }
-if args.count == 4 {  // single flat PNG: render <svg> <out.png> <pixels>
+if args.count == 4 {  // single opaque PNG: render <svg> <out.png> <pixels>
+    // Draw the SVG into an RGBA bitmap (a non-alpha NSBitmapImageRep renders it black), then flatten onto
+    // white into an alpha-free CGImage, which is what iOS app icons require.
     let px = Int(args[3])!
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
-                               samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
-                               colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let rgba = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+                                samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rgba)
     svg.draw(in: NSRect(x: 0, y: 0, width: px, height: px))
     NSGraphicsContext.restoreGraphicsState()
-    try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: args[2]))
+    guard let rendered = rgba.cgImage,
+          let context = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+        fatalError("could not create bitmap context")
+    }
+    context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: px, height: px))
+    context.draw(rendered, in: CGRect(x: 0, y: 0, width: px, height: px))
+    guard let flat = context.makeImage(),
+          let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: args[2]) as CFURL, "public.png" as CFString, 1, nil) else {
+        fatalError("could not create PNG destination")
+    }
+    CGImageDestinationAddImage(dest, flat, nil)
+    guard CGImageDestinationFinalize(dest) else { fatalError("could not write PNG") }
     exit(0)
 }
 let out = URL(fileURLWithPath: args[2], isDirectory: true)

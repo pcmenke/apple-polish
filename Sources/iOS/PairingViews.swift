@@ -4,9 +4,14 @@ import SwiftUI
 struct PairingView: View {
     @EnvironmentObject var model: ViewerModel
     @State private var text = ""
+    @State private var scanning = false
 
     var body: some View {
         Form {
+            Section {
+                Button { scanning = true } label: { Label("Scan QR code from your Mac", systemImage: "qrcode.viewfinder") }
+                    .font(.headline)
+            } footer: { Text("Easiest: the Mac shows a QR code in Share to iPhone.") }
             Section {
                 Text("On your Mac, open Apple Polish, click the iPhone button, turn on Share to iPhone, and copy the pairing key. Paste it here (Universal Clipboard carries it across).")
                     .font(.callout)
@@ -20,6 +25,16 @@ struct PairingView: View {
             }
         }
         .navigationTitle("Pair with your Mac")
+        .fullScreenCover(isPresented: $scanning) {
+            ZStack(alignment: .topTrailing) {
+                QRScannerView { code in
+                    scanning = false
+                    if let link = PairingLink(string: code) { model.handle(link: link) }
+                    else { model.message = "That QR code isn't an Apple Polish pairing code." }
+                }.ignoresSafeArea()
+                Button("Cancel") { scanning = false }.buttonStyle(.borderedProminent).padding()
+            }
+        }
     }
 }
 

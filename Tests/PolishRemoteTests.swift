@@ -11,6 +11,95 @@ final class PolishRemoteTests: XCTestCase {
         XCTAssertNil(MessagesLink.conversationURL(chatIdentifier: nil, isGroup: false))
     }
 
+    func testLocalLibraryQueryFiltersAndSorts() {
+        let day = { (n: Double) in Date(timeIntervalSince1970: n * 86_400) }
+        let assets = [
+            LocalAssetInfo(id: "small-photo", isVideo: false, date: day(3), size: 2_000_000),
+            LocalAssetInfo(id: "big-video", isVideo: true, duration: 90, date: day(1), size: 400_000_000),
+            LocalAssetInfo(id: "shot", isVideo: false, isScreenshot: true, date: day(2), size: 500_000),
+            LocalAssetInfo(id: "live", isVideo: false, isLivePhoto: true, date: day(4), size: 9_000_000),
+            LocalAssetInfo(id: "unmeasured", isVideo: true, date: day(5), size: nil),
+        ]
+        XCTAssertEqual(LocalLibraryQuery.apply(assets, filter: .all, sort: .largest).map(\.id),
+                       ["big-video", "live", "small-photo", "shot", "unmeasured"], "unmeasured sorts last")
+        XCTAssertEqual(LocalLibraryQuery.apply(assets, filter: .videos, sort: .newest).map(\.id), ["unmeasured", "big-video"])
+        XCTAssertEqual(LocalLibraryQuery.apply(assets, filter: .screenshots, sort: .largest).map(\.id), ["shot"])
+        XCTAssertEqual(LocalLibraryQuery.apply(assets, filter: .livePhotos, sort: .oldest).map(\.id), ["live"])
+        XCTAssertEqual(LocalLibraryQuery.apply(assets, filter: .all, sort: .oldest, minBytes: 5_000_000).map(\.id),
+                       ["big-video", "live", "unmeasured"], "below-threshold assets are dropped, unmeasured kept")
+        XCTAssertEqual(LocalLibraryQuery.totalBytes(assets), 411_500_000)
+    }
+
+    private func current(_ id: String, video: Bool = false, modified: Double? = 100) -> CurrentAsset {
+        CurrentAsset(id: id, isVideo: video, isScreenshot: false, isLivePhoto: false, duration: video ? 5 : 0,
+                     date: Date(timeIntervalSince1970: 500), modified: modified.map(Date.init(timeIntervalSince1970:)))
+    }
+
+    private func indexed(_ id: String, size: Int64, video: Bool = false, modified: Double? = 100) -> IndexedAsset {
+        IndexedAsset(info: LocalAssetInfo(id: id, isVideo: video, date: Date(timeIntervalSince1970: 500), size: size),
+                     modified: modified.map(Date.init(timeIntervalSince1970:)))
+    }
+
+    func testReconcileKeepsValidSizesAndFlagsOnlyNewOrChanged() {
+        let cached = ["same": indexed("same", size: 111), "edited": indexed("edited", size: 222, modified: 100),
+                      "gone": indexed("gone", size: 333)]
+        let result = LocalIndexReconciler.reconcile(
+            current: [current("same"), current("edited", modified: 999), current("new-photo"), current("new-video", video: true)],
+            cached: cached)
+        XCTAssertEqual(result.infos.map(\.id), ["same", "edited", "new-photo", "new-video"], "keeps PhotoKit order")
+        XCTAssertEqual(result.infos[0].size, 111, "unchanged asset reuses its cached size")
+        XCTAssertNil(result.infos[1].size, "edited asset must be measured again")
+        XCTAssertEqual(result.toMeasure, ["new-video", "edited", "new-photo"], "videos first")
+        XCTAssertEqual(result.vanished, ["gone"])
+        let forced = LocalIndexReconciler.reconcile(current: [current("same")], cached: cached, forceMeasure: true)
+        XCTAssertEqual(forced.toMeasure, ["same"])
+        XCTAssertNil(forced.infos[0].size)
+    }
+
+    func testLocalIndexStorePersistsAcrossReopen() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("idx-\(UUID().uuidString).sqlite").path
+        defer { for ext in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: path + ext) } }
+        do {
+            let store = try LocalIndexStore(path: path)
+            store.upsert([indexed("a", size: 10), indexed("b", size: 20, video: true, modified: nil),
+                          IndexedAsset(info: LocalAssetInfo(id: "unmeasured", isVideo: false), modified: nil)])
+            store.upsert([indexed("a", size: 11)])  // replaces
+            XCTAssertEqual(store.count(), 2, "unmeasured assets are not stored")
+        }
+        let reopened = try LocalIndexStore(path: path)
+        let all = reopened.loadAll()
+        XCTAssertEqual(all["a"]?.info.size, 11)
+        XCTAssertEqual(all["b"]?.info.isVideo, true)
+        XCTAssertNil(all["b"]?.modified)
+        XCTAssertEqual(all["a"]?.modified, Date(timeIntervalSince1970: 100))
+        reopened.remove(ids: ["a"])
+        XCTAssertEqual(reopened.loadAll().keys.sorted(), ["b"])
+        reopened.removeAll()
+        XCTAssertEqual(reopened.count(), 0)
+    }
+
+    func testPairingLinkRoundTrips() throws {
+        let key = PairingKey.generate()
+        let full = PairingLink(key: key, name: "Ada\u{2019}s MacBook Air", host: "Adas-MacBook-Air.local", port: 55714)
+        XCTAssertEqual(PairingLink(url: full.url), full)
+        XCTAssertEqual(PairingLink(string: " \(full.url.absoluteString)\n"), full, "tolerates scanner whitespace")
+        let bare = PairingLink(key: key)
+        XCTAssertEqual(PairingLink(url: bare.url), bare)
+        XCTAssertNil(PairingLink(url: bare.url)?.port)
+        XCTAssertTrue(full.url.absoluteString.hasPrefix("applepolish://pair?key="))
+    }
+
+    func testPairingLinkRejectsForeignAndMalformedInput() {
+        let key = PairingKey.generate().display
+        XCTAssertNil(PairingLink(string: "https://example.com/pair?key=\(key)"))
+        XCTAssertNil(PairingLink(string: "applepolish://other?key=\(key)"))
+        XCTAssertNil(PairingLink(string: "applepolish://pair?key=NOPE"))
+        XCTAssertNil(PairingLink(string: "applepolish://pair"))
+        XCTAssertNil(PairingLink(string: "hello world")?.port)
+        XCTAssertNil(PairingLink(string: "applepolish://pair?key=\(key)&port=999999")?.port, "out-of-range port is ignored")
+        XCTAssertNotNil(PairingLink(string: "applepolish://pair?key=\(key)&port=999999"))
+    }
+
     func testFramingRoundTripsAcrossArbitraryChunks() throws {
         let a = Framing.frame(Data("hello".utf8)), b = Framing.frame(Data(repeating: 7, count: 70_000))
         let all = a + b
