@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="squircle"><rect x="100" y="100" width="824" height="824" rx="188"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#10052b"/><stop offset="0.45" stop-color="#4b1790"/>
+      <stop offset="0.72" stop-color="#d12a86"/><stop offset="1" stop-color="#ff7a45"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a0a58"/><stop offset="1" stop-color="#11042b"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff58a"/><stop offset="0.5" stop-color="#ffa63d"/><stop offset="1" stop-color="#ff2e8a"/>
+    </linearGradient>
+    <linearGradient id="photo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38f0ff"/><stop offset="1" stop-color="#b24dff"/>
+    </linearGradient>
+    <!-- sun with horizontal slits that get thicker toward the horizon -->
+    <clipPath id="sunSlits">
+      <rect x="250" y="190" width="520" height="280"/>
+      <rect x="250" y="476" width="520" height="19"/>
+      <rect x="250" y="504" width="520" height="18"/>
+      <rect x="250" y="535" width="520" height="17"/>
+      <rect x="250" y="570" width="520" height="15"/>
+    </clipPath>
+    <path id="spark" d="M0,-34 C4,-10 10,-4 34,0 C10,4 4,10 0,34 C-4,10 -10,4 -34,0 C-10,-4 -4,-10 0,-34 Z"/>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#sky)"/>
+
+    <!-- stars / scribbles -->
+    <g fill="#fff" opacity="0.9">
+      <circle cx="210" cy="215" r="4"/><circle cx="300" cy="170" r="3"/><circle cx="760" cy="190" r="4"/>
+      <circle cx="860" cy="300" r="3"/><circle cx="170" cy="360" r="3"/><circle cx="640" cy="150" r="3"/>
+    </g>
+
+    <!-- sun (clipped to horizon by the ground drawn after it) -->
+    <circle cx="512" cy="430" r="244" fill="#ff5fa8" opacity="0.28"/>
+    <g clip-path="url(#sunSlits)"><circle cx="512" cy="430" r="230" fill="url(#sun)"/></g>
+
+    <!-- ground + neon grid -->
+    <rect x="100" y="600" width="824" height="324" fill="url(#ground)"/>
+    <g stroke="#ff3df0" stroke-linecap="round" fill="none">
+      <g opacity="0.25" stroke-width="16">
+        <path d="M512,600 L-450,930"/><path d="M512,600 L-150,930"/><path d="M512,600 L150,930"/>
+        <path d="M512,600 L350,930"/><path d="M512,600 L512,930"/><path d="M512,600 L674,930"/>
+        <path d="M512,600 L874,930"/><path d="M512,600 L1174,930"/><path d="M512,600 L1474,930"/>
+      </g>
+      <g stroke-width="5">
+        <path d="M512,600 L-450,930"/><path d="M512,600 L-150,930"/><path d="M512,600 L150,930"/>
+        <path d="M512,600 L350,930"/><path d="M512,600 L512,930"/><path d="M512,600 L674,930"/>
+        <path d="M512,600 L874,930"/><path d="M512,600 L1174,930"/><path d="M512,600 L1474,930"/>
+        <path d="M100,607 L924,607"/><path d="M100,622 L924,622"/><path d="M100,652 L924,652"/>
+        <path d="M100,702 L924,702"/><path d="M100,787 L924,787"/><path d="M100,920 L924,920"/>
+      </g>
+    </g>
+    <path d="M100,600 L924,600" stroke="#3df2ff" stroke-width="22" opacity="0.28"/>
+    <path d="M100,600 L924,600" stroke="#7df9ff" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- doodle polaroid (misregistered pink outline first, then the real one) -->
+    <g transform="rotate(-9 512 560)">
+      <rect x="356" y="372" width="324" height="392" rx="16" fill="none" stroke="#ff3d9a" stroke-width="9" opacity="0.85"/>
+      <rect x="348" y="362" width="324" height="392" rx="16" fill="#fff6e6" stroke="#1a0a3d" stroke-width="14"/>
+      <rect x="376" y="392" width="268" height="272" rx="8" fill="url(#photo)" stroke="#1a0a3d" stroke-width="10"/>
+      <!-- photo doodle: wonky sun + mountains + play badge -->
+      <circle cx="570" cy="456" r="34" fill="#fff58a" stroke="#1a0a3d" stroke-width="9"/>
+      <path d="M382,652 L452,520 L492,578 L538,498 L640,652 Z" fill="#2a0a58" stroke="#1a0a3d" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M452,520 L470,552 L444,544 L430,560" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="610" cy="620" r="40" fill="#ff3d9a" stroke="#1a0a3d" stroke-width="9"/>
+      <path d="M597,600 L631,621 L598,642 Z" fill="#fff" stroke="#1a0a3d" stroke-width="6" stroke-linejoin="round"/>
+      <!-- scribbled caption squiggle -->
+      <path d="M392,706 C410,690 424,722 444,704 C464,686 476,722 498,704 C518,688 530,720 552,704 C570,692 582,712 602,702" fill="none" stroke="#1a0a3d" stroke-width="9" stroke-linecap="round"/>
+      <path d="M392,738 L520,738" fill="none" stroke="#1a0a3d" stroke-width="7" stroke-linecap="round" opacity="0.55"/>
+    </g>
+
+    <!-- sparkles and doodle bits -->
+    <g fill="#fff"><use href="#spark" x="228" y="300" transform="translate(0,0)"/>
+      <use href="#spark" x="790" y="400" transform="translate(0,0) scale(1)"/></g>
+    <g fill="#7df9ff"><use href="#spark" x="780" y="215"/><use href="#spark" x="206" y="560"/></g>
+    <g fill="none" stroke="#ffe36a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M262,196 l26,26 m0,-26 l-26,26"/>
+      <path d="M826,566 c18,-22 40,22 60,0 c18,-20 34,18 48,2"/>
+    </g>
+    <path d="M150,470 C170,446 190,494 214,470 C236,448 254,490 274,468" fill="none" stroke="#3df2ff" stroke-width="8" stroke-linecap="round"/>
+  </g>
+</svg>

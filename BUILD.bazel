@@ -1,7 +1,16 @@
+load("@rules_apple//apple:ios.bzl", "ios_application")
 load("@rules_apple//apple:macos.bzl", "macos_application", "macos_unit_test")
 load("@rules_swift//swift:swift_library.bzl", "swift_library")
 
 package(default_visibility = ["//visibility:public"])
+
+# Wire protocol, TLS-PSK transport, pairing key and Messages deep links. Foundation + Network only,
+# so it builds for both macOS and iOS.
+swift_library(
+    name = "PolishRemote",
+    srcs = glob(["Sources/PolishRemote/*.swift"]),
+    module_name = "PolishRemote",
+)
 
 # Data model and the Messages-library reader. No UI, so it is unit-testable.
 swift_library(
@@ -16,11 +25,12 @@ swift_library(
     srcs = glob(["Sources/App/*.swift"]),
     copts = ["-parse-as-library"],
     module_name = "ApplePolishApp",
-    deps = [":PolishCore"],
+    deps = [":PolishCore", ":PolishRemote"],
 )
 
 macos_application(
     name = "ApplePolish",
+    app_icons = glob(["Sources/App/Assets.xcassets/AppIcon.appiconset/**"]),
     bundle_id = "com.pcmenke.applepolish",
     bundle_name = "Apple Polish",
     infoplists = ["Sources/App/Info.plist"],
@@ -40,4 +50,38 @@ macos_unit_test(
     name = "PolishCoreTests",
     minimum_os_version = "14.0",
     deps = [":PolishCoreTestSources"],
+)
+
+# iPhone viewer: browses the Mac app's shared media list over a TLS-PSK LAN connection.
+swift_library(
+    name = "ViewerSources",
+    srcs = glob(["Sources/iOS/*.swift"]),
+    copts = ["-parse-as-library"],
+    module_name = "ApplePolishViewer",
+    deps = [":PolishRemote"],
+)
+
+ios_application(
+    name = "ApplePolishViewer",
+    app_icons = glob(["Sources/iOS/Assets.xcassets/AppIcon.appiconset/**"]),
+    bundle_id = "com.pcmenke.applepolish.viewer",
+    bundle_name = "Apple Polish Viewer",
+    families = ["iphone"],
+    infoplists = ["Sources/iOS/Info.plist"],
+    minimum_os_version = "17.0",
+    deps = [":ViewerSources"],
+)
+
+swift_library(
+    name = "PolishRemoteTestSources",
+    testonly = True,
+    srcs = ["Tests/PolishRemoteTests.swift"],
+    module_name = "PolishRemoteTests",
+    deps = [":PolishRemote"],
+)
+
+macos_unit_test(
+    name = "PolishRemoteTests",
+    minimum_os_version = "14.0",
+    deps = [":PolishRemoteTestSources"],
 )

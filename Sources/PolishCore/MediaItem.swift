@@ -30,12 +30,19 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// False for a video whose first bytes are not a QuickTime/MP4 container (random or
     /// encrypted data). Such files can never be thumbnailed or played.
     public let isReadable: Bool
+    /// The Messages `chat_identifier`: a phone number or email for 1:1 chats, an opaque id for groups.
+    public let chatIdentifier: String?
+    public let isGroup: Bool
+    /// True when the conversation was inferred from an exact file-size match with a video message
+    /// whose own file is missing, rather than from a database path.
+    public let matchedBySize: Bool
 
     public var isLinked: Bool { conversation != nil }
     public var name: String { url.lastPathComponent }
 
     public init(url: URL, kind: MediaKind, size: Int64, date: Date?,
-                conversation: String?, sender: String?, isReadable: Bool = true) {
+                conversation: String?, sender: String?, isReadable: Bool = true,
+                chatIdentifier: String? = nil, isGroup: Bool = false, matchedBySize: Bool = false) {
         self.url = url
         self.kind = kind
         self.size = size
@@ -43,6 +50,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.conversation = conversation
         self.sender = sender
         self.isReadable = isReadable
+        self.chatIdentifier = chatIdentifier
+        self.isGroup = isGroup
+        self.matchedBySize = matchedBySize
     }
 }
 

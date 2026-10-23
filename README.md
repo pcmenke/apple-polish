@@ -5,10 +5,25 @@ Tool to cleanup space on a Mac.
 The goal is a native macOS (SwiftUI) app, since the tools need real UI (thumbnail grids, previews, selection).
 `prototype/` holds throwaway Python versions used to learn the data model.
 
+## iPhone viewer
+
+The iPhone app (`//:ApplePolishViewer`) is a viewer: it cannot read Messages itself (iOS sandboxing), so the Mac
+app serves the media list and thumbnails and the phone browses them.
+
+- Mac app: toolbar iPhone button, turn on **Share to iPhone** (off by default), copy the pairing key.
+- Phone: paste the key, pick the Mac (Bonjour) or enter host + port (VPN/Tailscale works).
+- Transport: TLS 1.2 with a pre-shared 128-bit key (`Sources/PolishRemote`), LAN only; peers without the key
+  cannot complete the handshake. The key is kept in the Keychain on both devices.
+- From the phone you can open a conversation in the phone's own Messages (to delete there, which is what clears
+  iCloud) or send "Move to Trash" to the Mac.
+
+Simulator build: `bazelisk build //:ApplePolishViewer --ios_multi_cpus=sim_arm64`. A real device needs a
+provisioning profile for `com.pcmenke.applepolish.viewer` (not set up yet).
+
 ## Build (Bazel)
 
     bazelisk build //:ApplePolish        # -> Apple Polish.app (zip in bazel-bin/)
-    bazelisk test  //:PolishCoreTests    # unit tests
+    bazelisk test  //:PolishCoreTests //:PolishRemoteTests    # unit tests
     bazelisk run   //:ApplePolish        # build and launch
 
 - `Sources/PolishCore`: data model and the Messages-library reader (no UI, unit-tested).

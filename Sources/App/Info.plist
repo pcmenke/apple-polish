@@ -24,6 +24,12 @@
 	<string>$(MinimumOSVersion)</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Apple Polish looks up contact names so conversations show people instead of phone numbers. Nothing leaves this Mac.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_applepolish._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Apple Polish can share its media list with your own iPhone on this network, only when you turn on sharing.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

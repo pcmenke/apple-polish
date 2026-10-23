@@ -1,5 +1,6 @@
 import AppKit
 import PolishCore
+import PolishRemote
 import SwiftUI
 
 private enum Source: Hashable {
@@ -13,7 +14,9 @@ private enum SortOrder: String, CaseIterable, Identifiable {
 }
 
 struct ContentView: View {
-    @StateObject private var store = MediaStore()
+    @StateObject private var store: MediaStore
+    @StateObject private var host: RemoteHost
+    @State private var showShare = false
     @State private var source: Source? = .all
     @State private var kind: MediaKind?
     @State private var sort = SortOrder.largest
@@ -21,6 +24,12 @@ struct ContentView: View {
     @State private var shown: [MediaItem] = []
     @State private var tracker = ViewportTracker()
     @State private var pendingTrash: [MediaItem] = []
+
+    init() {
+        let store = MediaStore()
+        _store = StateObject(wrappedValue: store)
+        _host = StateObject(wrappedValue: RemoteHost(store: store))
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -63,7 +72,7 @@ struct ContentView: View {
                 row("Not linked to a message", count: unlinked.count, size: unlinked.reduce(0) { $0 + $1.size })
                     .tag(Source.unlinked)
                 let unreadable = store.items.filter { !$0.isReadable }
-                row("Unreadable files (not valid video)", count: unreadable.count, size: unreadable.reduce(0) { $0 + $1.size })
+                row("Unplayable video data", count: unreadable.count, size: unreadable.reduce(0) { $0 + $1.size })
                     .tag(Source.unreadable)
             }
             Section("Conversations") {
@@ -158,6 +167,12 @@ struct ContentView: View {
                     ForEach(SortOrder.allCases) { Text($0.rawValue).tag($0) }
                 }
             }
+            ToolbarItem {
+                Button("iPhone", systemImage: host.isSharing ? "iphone.radiowaves.left.and.right" : "iphone") {
+                    showShare.toggle()
+                }
+                .popover(isPresented: $showShare) { ShareToPhoneView(host: host) }
+            }
             ToolbarItem { Button("Reload", systemImage: "arrow.clockwise") { store.reload() } }
         }
     }
@@ -181,15 +196,20 @@ struct ContentView: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor, lineWidth: selected ? 3 : 0)
                 }
-            Text(item.conversation ?? "Not linked to a message").font(.caption.bold()).lineLimit(1)
+            Text((item.conversation ?? "Not linked to a message") + (item.matchedBySize ? " (by size)" : ""))
+                .font(.caption.bold()).lineLimit(1)
             Text([item.date?.formatted(date: .abbreviated, time: .omitted), item.sender]
                 .compactMap { $0 }.joined(separator: " · "))
                 .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
         }
+        .onTapGesture(count: 2) { NSWorkspace.shared.open(item.url) }
         .onTapGesture { if selected { selection.remove(item.id) } else { selection.insert(item.id) } }
         .contextMenu {
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.url]) }
             Button("Open") { NSWorkspace.shared.open(item.url) }
+            if item.isLinked {
+                Button("Open Conversation in Messages") { store.openInMessages(item) }
+            }
             Divider()
             let targets = selected ? shown.filter { selection.contains($0.id) } : [item]
             Button(targets.count > 1 ? "Move \(targets.count) Selected to Trash…" : "Move to Trash…",
@@ -202,13 +222,15 @@ struct ContentView: View {
         return HStack {
             Text("\(items.count) shown, \(Formatting.bytes(items.reduce(0) { $0 + $1.size }))")
             if let message = store.statusMessage ?? store.contactsNote {
-                Text(message).foregroundStyle(.secondary).lineLimit(1)
+                Text(message).foregroundStyle(.secondary).lineLimit(2).help(message)
             }
             Spacer()
             Text("\(picked.count) selected, \(Formatting.bytes(picked.reduce(0) { $0 + $1.size }))")
             Button("Reveal selected in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting(picked.map(\.url))
             }.disabled(picked.isEmpty)
+            Button("Open in Messages") { if let one = picked.first { store.openInMessages(one) } }
+                .disabled(picked.count != 1 || !(picked.first?.isLinked ?? false))
             Button("Move to Trash…", role: .destructive) { pendingTrash = picked }.disabled(picked.isEmpty)
             Button("Clear") { selection.removeAll() }.disabled(picked.isEmpty)
         }

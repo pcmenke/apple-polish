@@ -46,7 +46,7 @@ final class PolishCoreTests: XCTestCase {
         XCTAssertEqual(sqlite3_open(root.appendingPathComponent("chat.db").path, &db), SQLITE_OK)
         let ns = 86_400 * 1_000_000_000
         let sql = """
-            CREATE TABLE attachment(ROWID INTEGER PRIMARY KEY, filename TEXT, mime_type TEXT);
+            CREATE TABLE attachment(ROWID INTEGER PRIMARY KEY, filename TEXT, mime_type TEXT, total_bytes INTEGER);
             CREATE TABLE message(ROWID INTEGER PRIMARY KEY, date INTEGER, is_from_me INTEGER, handle_id INTEGER);
             CREATE TABLE message_attachment_join(message_id INTEGER, attachment_id INTEGER);
             CREATE TABLE chat(ROWID INTEGER PRIMARY KEY, display_name TEXT, chat_identifier TEXT, style INTEGER);
@@ -56,9 +56,9 @@ final class PolishCoreTests: XCTestCase {
             INSERT INTO handle VALUES (1, '+15551234567');
             INSERT INTO chat VALUES (1, NULL, '+15551234567', 45);
             INSERT INTO message VALUES (1, \(ns), 0, 1);
-            INSERT INTO attachment VALUES (1, '\(linkedVideo)', 'video/quicktime');
-            INSERT INTO attachment VALUES (2, '\(linkedTiny)', 'image/heic');
-            INSERT INTO attachment VALUES (3, '/nonexistent/gone.mov', 'video/quicktime');
+            INSERT INTO attachment VALUES (1, '\(linkedVideo)', 'video/quicktime', 2000000);
+            INSERT INTO attachment VALUES (2, '\(linkedTiny)', 'image/heic', 0);
+            INSERT INTO attachment VALUES (3, '/nonexistent/gone.mov', 'video/quicktime', 3000000);
             INSERT INTO message_attachment_join VALUES (1, 1), (1, 2), (1, 3);
             INSERT INTO chat_message_join VALUES (1, 1);
             """
@@ -68,11 +68,15 @@ final class PolishCoreTests: XCTestCase {
         let items = try MessagesLibrary(root: root).load(minBytes: 1_000_000)
         XCTAssertEqual(items.map(\.name), ["loose.mov", "clip.mov"], "largest first; tiny, missing and non-media files skipped")
         XCTAssertEqual(items[0].url.resolvingSymlinksInPath().path, orphanVideo)
-        XCTAssertFalse(items[0].isLinked)
+        XCTAssertTrue(items[0].isLinked, "loose.mov is exactly the size of the missing gone.mov message video")
+        XCTAssertTrue(items[0].matchedBySize)
+        XCTAssertEqual(items[0].conversation, "+15551234567")
         XCTAssertFalse(items[0].isReadable, "zero-filled .mov has no container header")
         XCTAssertTrue(items[1].isReadable)
         XCTAssertTrue(items[1].isLinked)
         XCTAssertEqual(items[1].conversation, "+15551234567")
+        XCTAssertEqual(items[1].chatIdentifier, "+15551234567")
+        XCTAssertFalse(items[1].isGroup)
         XCTAssertEqual(items[1].sender, "+15551234567")
         XCTAssertEqual(items[1].date, Date(timeIntervalSinceReferenceDate: 86_400))
 

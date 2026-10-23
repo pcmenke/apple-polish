@@ -30,7 +30,8 @@ public struct MessagesLibrary: Sendable {
         SELECT a.filename, a.mime_type, m.date, m.is_from_me, h.id,
                c.display_name, c.chat_identifier, c.style,
                (SELECT group_concat(h2.id, ',') FROM chat_handle_join chj
-                  JOIN handle h2 ON h2.ROWID = chj.handle_id WHERE chj.chat_id = c.ROWID)
+                  JOIN handle h2 ON h2.ROWID = chj.handle_id WHERE chj.chat_id = c.ROWID),
+               a.total_bytes
         FROM attachment a
         JOIN message_attachment_join maj ON maj.attachment_id = a.ROWID
         JOIN message m ON m.ROWID = maj.message_id
@@ -43,10 +44,20 @@ public struct MessagesLibrary: Sendable {
     /// Photos and videos of at least `minBytes`, largest first: first those the database links
     /// to a conversation, then files on disk that no database row points at.
     public func load(minBytes: Int64 = 1_000_000) throws -> [MediaItem] {
-        var linked = try linkedItems(minBytes: minBytes)
+        var (linked, missing) = try linkedItems(minBytes: minBytes)
         let known = Set(linked.map(\.id)).union(try allReferencedPaths())
-        linked.append(contentsOf: unlinkedItems(excluding: known, minBytes: minBytes))
+        linked.append(contentsOf: unlinkedItems(excluding: known, minBytes: minBytes, bySize: missing))
         return linked.sorted { $0.size > $1.size }
+    }
+
+    /// Who a video message belongs to, for attributing files that exist on disk under a name
+    /// the database does not know. Matching is by exact byte size, which is strong but not proof.
+    struct MessageInfo: Sendable {
+        let conversation: String
+        let sender: String?
+        let date: Date?
+        let chatIdentifier: String?
+        let isGroup: Bool
     }
 
     // MARK: Database
@@ -89,31 +100,41 @@ public struct MessagesLibrary: Sendable {
         sqlite3_column_text(stmt, col).map { String(cString: $0) }
     }
 
-    private func linkedItems(minBytes: Int64) throws -> [MediaItem] {
+    private func linkedItems(minBytes: Int64) throws -> ([MediaItem], [Int64: MessageInfo]) {
         try withDatabase { db in
             var seen = Set<String>()
             var items: [MediaItem] = []
+            var missing: [Int64: MessageInfo] = [:]
             try rows(db, Self.query) { stmt in
                 guard let filename = text(stmt, 0) else { return }
                 let path = Self.normalize(filename)
                 let kind = MediaKind.classify(path: path, mimeType: text(stmt, 1))
-                guard kind != .other, !seen.contains(path),
-                      let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-                      let size = (attrs[.size] as? NSNumber)?.int64Value, size >= minBytes
-                else { return }
-                seen.insert(path)
+                guard kind != .other, !seen.contains(path) else { return }
                 let members = (text(stmt, 8) ?? "").split(separator: ",").map(String.init)
+                let isGroup = sqlite3_column_int(stmt, 7) == 43
                 let convo = Formatting.conversationName(
                     displayName: text(stmt, 5), identifier: text(stmt, 6).map(names.display),
-                    members: members.map(names.display), isGroup: sqlite3_column_int(stmt, 7) == 43)
+                    members: members.map(names.display), isGroup: isGroup)
+                let date = Formatting.date(fromMessageNanos: sqlite3_column_int64(stmt, 2))
+                let sender = sqlite3_column_int(stmt, 3) != 0 ? "You" : text(stmt, 4).map(names.display)
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                      let size = (attrs[.size] as? NSNumber)?.int64Value else {
+                    let declared = sqlite3_column_int64(stmt, 9)
+                    if kind == .video, declared >= minBytes, missing[declared] == nil {
+                        missing[declared] = MessageInfo(conversation: convo, sender: sender, date: date,
+                                                        chatIdentifier: text(stmt, 6), isGroup: isGroup)
+                    }
+                    return
+                }
+                guard size >= minBytes else { return }
+                seen.insert(path)
                 items.append(MediaItem(
-                    url: URL(fileURLWithPath: path), kind: kind, size: size,
-                    date: Formatting.date(fromMessageNanos: sqlite3_column_int64(stmt, 2)),
-                    conversation: convo,
-                    sender: sqlite3_column_int(stmt, 3) != 0 ? "You" : text(stmt, 4).map(names.display),
-                    isReadable: kind != .video || FileSignature.looksLikeQuickTime(url: URL(fileURLWithPath: path))))
+                    url: URL(fileURLWithPath: path), kind: kind, size: size, date: date,
+                    conversation: convo, sender: sender,
+                    isReadable: kind != .video || FileSignature.looksLikeQuickTime(url: URL(fileURLWithPath: path)),
+                    chatIdentifier: text(stmt, 6), isGroup: isGroup))
             }
-            return items
+            return (items, missing)
         }
     }
 
@@ -129,7 +150,8 @@ public struct MessagesLibrary: Sendable {
 
     // MARK: Disk
 
-    private func unlinkedItems(excluding known: Set<String>, minBytes: Int64) -> [MediaItem] {
+    private func unlinkedItems(excluding known: Set<String>, minBytes: Int64,
+                               bySize: [Int64: MessageInfo]) -> [MediaItem] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
         guard let walker = FileManager.default.enumerator(
             at: root.appendingPathComponent("Attachments"),
@@ -141,9 +163,12 @@ public struct MessagesLibrary: Sendable {
             let path = url.resolvingSymlinksInPath().path
             let kind = MediaKind.classify(path: path, mimeType: nil)
             guard kind != .other, !known.contains(path) else { continue }
-            items.append(MediaItem(url: url, kind: kind, size: size, date: v.contentModificationDate,
-                                   conversation: nil, sender: nil,
-                                   isReadable: kind != .video || FileSignature.looksLikeQuickTime(url: url)))
+            let owner = kind == .video ? bySize[size] : nil
+            items.append(MediaItem(url: url, kind: kind, size: size, date: owner?.date ?? v.contentModificationDate,
+                                   conversation: owner?.conversation, sender: owner?.sender,
+                                   isReadable: kind != .video || FileSignature.looksLikeQuickTime(url: url),
+                                   chatIdentifier: owner?.chatIdentifier, isGroup: owner?.isGroup ?? false,
+                                   matchedBySize: owner != nil))
         }
         return items
     }

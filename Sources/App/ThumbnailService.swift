@@ -40,6 +40,14 @@ final class ThumbnailService: @unchecked Sendable {
         return await scheduler.request(item)
     }
 
+    /// JPEG bytes of the thumbnail, for sending to the iPhone viewer.
+    func jpegData(for item: MediaItem) async -> Data? {
+        guard case .image(let image) = await result(for: item) else { return nil }
+        if let onDisk = DiskCache.data(for: item) { return onDisk }
+        guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
+    }
+
     /// Replace the set of speculative (not yet visible) thumbnails, nearest first.
     func setPrefetch(_ items: [MediaItem]) {
         let needed = items.filter { resolved($0) == nil }
@@ -160,7 +168,7 @@ enum ThumbnailRenderer {
         case .photo:
             image = imageIOThumbnail(item.url)
         case .video:
-            guard item.isReadable else { return .unavailable("Not a valid video file") }
+            guard item.isReadable else { return .unavailable("Encrypted or incomplete video data") }
             image = await videoThumbnail(item.url)
         case .other:
             image = nil
@@ -216,6 +224,8 @@ enum DiskCache {
         let digest = SHA256.hash(data: Data("\(item.url.path)|\(item.size)|\(mtime)".utf8))
         return directory.appendingPathComponent(digest.prefix(16).map { String(format: "%02x", $0) }.joined() + ".jpg")
     }
+
+    static func data(for item: MediaItem) -> Data? { try? Data(contentsOf: file(for: item)) }
 
     static func load(_ item: MediaItem) -> NSImage? {
         guard let source = CGImageSourceCreateWithURL(file(for: item) as CFURL, nil),
